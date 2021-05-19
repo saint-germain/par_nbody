@@ -45,7 +45,7 @@ if __name__ == '__main__':
     start = datetime.datetime.now()
 
     try:
-        parmap.map(mainIntegrator, txtFiles[0:256], folder_to_save, pm_chunksize=1, pm_processes=4, pm_pbar=True)
+        parmap.map(mainIntegrator, txtFiles[64:256], folder_to_save, pm_chunksize=1, pm_pbar=True)
     except Exception as error:
         print(error)
 

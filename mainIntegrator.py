@@ -129,9 +129,7 @@ def mainIntegrator(systemName: str, folder_save: str):
     
     Nmfile = 'Nmass.txt'
     outfile2 = open(wdir + folder_save_states + systemName[11:-4] + '/' + Nmfile, 'w')
-    outfile2.write("%.5f , %d , %d , %d, %d, %.20f , %.20f , %.20f, %.5f %s " % (0.6, len(
-        Mi) - 2, 0, len(Mi) - 2, len(np.where(Mi > Mpla)[0]) - 2, Mtot, Mtot,
-        Mtot, Mstar, '\n'))
+    outfile2.write("%.5f , %d , %d , %d, %d, %.20f , %.20f , %.20f, %.5f %s " % (0.6, len(Mi), 0, len(Mi), len(np.where(Mi > Mpla)[0]), Mtot, Mtot, Mtot, Mstar, '\n'))
     # outfile2.write(systemName + '\n')
     outfile2.close()
 
@@ -421,7 +419,7 @@ def mainIntegrator(systemName: str, folder_save: str):
             ###################END PLANET RADIUS#############
             
             ###################ENERGY################
-            especific_orbital_energy = v2/2 - mu_param/r_norm
+            # especific_orbital_energy = v2/2 - mu_param/r_norm
             # print(especific_orbital_energy)
             ###################END ENERGY############
 
@@ -484,7 +482,38 @@ def mainIntegrator(systemName: str, folder_save: str):
         t += dt
     	###############END EVOLUTION##################
 
+        ###################CHECKING ECCENTRICITY & ENERGY####################
+        tol = 1e-7 # Tolerance factor
+        mu_param = Mstar # Gravitational parameter
+
+        h = ri[:, 0] * vi[:, 1] - ri[:, 1] * vi[:, 0] # Angular momentum per unit mass
+        h2 = h * h
+
+        r_norm = np.linalg.norm(ri, axis=1)
+        v2 = np.sum(vi*vi, axis=1)
+
+        a_semi_major = mu_param*r_norm/(2*mu_param - r_norm*v2) # Semimajor axis: to save
+
+        e2 = 1 - h2 / mu_param * (1. / a_semi_major)
+        # e2 = 1 + h2/mu_param*(v2/mu_param - 2/r_norm)
+
+        e2[np.abs(e2) < tol] = 0
+
+        e = np.sqrt(e2)
+
+        e[e < tol] = 0 # Eccentricity: To save
+
+        a_semi_major[e >= 1] = r_norm[e >= 1]
+
+        # especific_orbital_energy = v2/2 - mu_param/r_norm
+        ###################END CHECKING ECCENTRICITY & ENERGY################
+
     	##############REMOVING BODIES##############
+        # Remove SuperEccentric orbits
+        super_eccentric_index = e - 1 >= -tol
+        super_eccentric_index = np.arange(len(Mi))[super_eccentric_index]
+        MDiv,CDiv,Mi,vi,ri= RMArray(super_eccentric_index,MDiv,CDiv,Mi,vi,ri,True)
+        
         # Remove near bodies to star
         Ndist0 = np.linalg.norm(ri, axis=1)
         Nind0 = Ndist0 < 0.1 * F
@@ -498,25 +527,11 @@ def mainIntegrator(systemName: str, folder_save: str):
         NVEES1 = np.power(2. * (Mstar) / Ndist1, 0.5)  # Velocidad de scape del sistema
         Nind1 = Ndist1 > 30. * F
         Nindrm1 = Nvelp1 >= NVEES1  # Objetos a remover
+        Nindrm1_vel = np.arange(len(Mi))[Nindrm1]
         Nindrm1 = np.arange(len(Mi))[Nind1 & Nindrm1]
         MDiv, CDiv, Mi, vi, ri = RMArray(Nindrm1, MDiv, CDiv, Mi, vi, ri, True)
-
-        # Remove diverge bodies Time
-        Ndist2 = np.linalg.norm(ri, axis=1)
-        Nvelp2 = np.linalg.norm(vi, axis=1)
-        NTmass2 = np.sum(Mi)
-        NVEES2 = np.power(2. * (Mstar) / Ndist2,0.5)  # Velocidad de scape del sistema
-        Nind2 = Ndist2 > 30. * F
-        Nind2 = np.arange(len(Mi))[Nind2]
-        # razon de distancia rb/ra para encontrar tiempo
-        RDis = np.power(1. / (1. - (Nvelp2[Nind2] / NVEES2[Nind2])**2), 0.5)
-        NTiVuel = np.power(Ndist2[Nind2], 0.5) * (RDis * np.power(RDis ** 2 - 1, 0.5) + RDis**3 * np.arccos(1. / RDis))  # Tiempo de vuelta
-        DelTiV=np.sort(np.where(2*NTiVuel> tf-t)[0])
-        #DelTiV = 2 * NTiVuel > tf - t
-        #DelTiV = np.arange(len(Mi))[DelTiV]
-        MDiv, CDiv, Mi, vi, ri = RMArray(DelTiV, MDiv, CDiv, Mi, vi, ri, True)
-
-        # END REMOVING BODIES##############%Coun100
+        MDiv, CDiv, Mi, vi, ri = RMArray(Nindrm1_vel, MDiv, CDiv, Mi, vi, ri, True)
+        ##############END REMOVING BODIES##############
 
         ###############SAVING DATES#######################
         minimum_record = t % record
@@ -529,42 +544,17 @@ def mainIntegrator(systemName: str, folder_save: str):
 
             Rx=ri[0:len(Mi),0:1]/F
             Ry=ri[0:len(Mi),1:2]/F
-            ###################CHECKING ECCENTRICITY####################
-            tol = 1e-7
-            mu_param = Mstar
-            h = ri[:, 0] * vi[:, 1] - ri[:, 1] * vi[:, 0]
-            h2 = h * h
 
-            r_norm = np.linalg.norm(ri, axis=1)
-            v2 = np.sum(vi*vi, axis=1)
-
-            # Calcular eje semimayor
-            a_semi_major = mu_param*r_norm/(2*mu_param - r_norm*v2)
-            
-            # Calcular excentricidad
-            e2 = 1 - h2 / mu_param * (1. / a_semi_major)
-            e2[np.abs(e2) < tol] = 0
-            
-            e = np.sqrt(e2)
-            e[e < tol] = 0
-            
-            a_semi_major[e >= 1] = r_norm[e >= 1]
             b_semi_minor = a_semi_major*np.sqrt(1 - e**2)
-
+        
             theta = np.arctan((ri[:,1]*a_semi_major)/(ri[:,0]*b_semi_minor))
-            ###################END CHECKING ECCENTRICITY################
-            
+
             ###################PLANET RADIUS################
             earth_radius = 6.3781e8 # centimeters 
             radius_planet = (Mi/(4*np.pi/3*den))**(1./3.)
             radius_planet = radius_planet / (cm_to_LU * earth_radius)
             ###################END PLANET RADIUS#############
             
-            ###################ENERGY################
-            especific_orbital_energy = v2/2 - mu_param/r_norm
-            # print(especific_orbital_energy)
-            ###################END ENERGY############
-
             outfile2 = open(wdir + folder_save_states + systemName[11:-4] + '/' + 'PltAllGraph%05d.txt'%Coun100,'w')
             orbital_elements = open(wdir + folder_save_states + systemName[11:-4] + '/' + 'OrbitalElements%05d.txt'%Coun100,'w')
             
